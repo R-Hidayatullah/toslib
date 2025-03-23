@@ -1,5 +1,7 @@
 /target
 /output
+/venv
+
 *.ipf
 *.xac
 *.dds
