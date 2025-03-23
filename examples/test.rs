@@ -4,7 +4,7 @@ use std::{fs::File, io::BufReader};
 
 use toslib::ipf::IPFFile;
 use toslib::tosreader::BinaryReader;
-use toslib::xac::XACFile;
+use toslib::xac::{Mesh, XACFile};
 use toslib::{add, xac};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -20,6 +20,43 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "barrack_model.xac",
     )?;
     Ok(())
+}
+
+fn extract_xac_data(ipf_path: &str, xac_filename: &str) -> io::Result<Vec<Mesh>> {
+    // Check if the IPF file exists
+    if !Path::new(ipf_path).exists() {
+        println!("Error: IPF file '{}' not found!", ipf_path);
+    }
+
+    // Open the IPF file
+    let file = File::open(ipf_path)?;
+    let mut reader = BinaryReader::new(BufReader::new(file));
+
+    // Load the IPF file
+    let ipf = IPFFile::load_from_reader(&mut reader)?;
+
+    let mut extracted_count = 0;
+    let mut result_mesh: Vec<Mesh> = Vec::new();
+    for file_entry in ipf.file_table() {
+        let filename = file_entry.directory_name();
+
+        // Extract only the filename part (without the directory)
+        let file_name_only = Path::new(&filename)
+            .file_name()
+            .and_then(|f| f.to_str())
+            .unwrap_or("");
+
+        // Check if the extracted filename matches the target
+        if file_name_only == xac_filename {
+            let result = file_entry.extract(&mut reader)?;
+            let mut xac_data = XACFile::load_from_bytes(result)?;
+
+            result_mesh = xac_data.export_all_meshes_into_struct()?;
+            break; // Stop after extracting the target file
+        }
+    }
+
+    Ok(result_mesh)
 }
 
 fn extract_xac_from_ipf(ipf_path: &str, xac_filename: &str) -> io::Result<()> {
