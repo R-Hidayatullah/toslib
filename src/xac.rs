@@ -1103,6 +1103,33 @@ pub struct XACFile {
     chunk_data: Vec<XacChunkData>,
 }
 
+#[derive(Default, Debug, Serialize, Deserialize)]
+pub struct SubMesh {
+    pub texture_name: String,
+    pub position_count: usize,
+    pub positions: Vec<[f32; 3]>,
+    pub normal_count: usize,
+    pub normals: Vec<[f32; 3]>,
+    pub tangent_count: usize,
+    pub tangents: Vec<[f32; 4]>,
+    pub uvcoord_count: usize,
+    pub uvcoords: Vec<[f32; 2]>,
+    pub color32_count: usize,
+    pub colors32: Vec<u32>,
+    pub original_vertex_numbers_count: usize,
+    pub original_vertex_numbers: Vec<u32>,
+    pub color128_count: usize,
+    pub colors128: Vec<[f32; 4]>,
+    pub bitangent_count: usize,
+    pub bitangents: Vec<[f32; 3]>,
+}
+
+#[derive(Default, Debug, Serialize, Deserialize)]
+pub struct Mesh {
+    pub submesh_count: usize,
+    pub submeshes: Vec<SubMesh>,
+}
+
 impl XACFile {
     pub fn load_from_file<P: AsRef<Path>>(file_path: P) -> io::Result<Self> {
         let file = std::fs::File::open(file_path)?;
@@ -1843,6 +1870,26 @@ impl XACFile {
         Ok(())
     }
 
+    pub fn export_all_meshes_into_struct(&mut self) -> io::Result<Vec<Mesh>> {
+        let mut all_meshes: Vec<Mesh> = Vec::new(); // Assuming Mesh is a struct and can be initialized with default values
+
+        for (i, chunk) in self.chunk_data.iter().enumerate() {
+            match chunk {
+                XacChunkData::XACMesh(mesh) => {
+                    // Directly move the mesh from chunk
+                    all_meshes.push(self.export_to_struct(mesh)?); // Move the mesh
+                }
+                XacChunkData::XACMesh2(mesh) => {
+                    // Directly move the mesh from chunk
+                    all_meshes.push(self.export_to_struct2(mesh)?); // Move the mesh
+                }
+                _ => continue,
+            }
+        }
+
+        Ok(all_meshes) // Return the final mesh after all iterations
+    }
+
     fn export_to_obj(&self, mesh: &XACMesh, output_prefix: &str) -> io::Result<()> {
         let texture_name = self.get_texture_names();
 
@@ -2163,5 +2210,813 @@ impl XACFile {
         }
 
         Ok(())
+    }
+
+    fn export_to_struct(&self, mesh: &XACMesh) -> io::Result<Mesh> {
+        let texture_name = self.get_texture_names();
+
+        // Find layers by their layer_type_id
+        let positions_layer = mesh
+            .vertex_attribute_layer
+            .iter()
+            .find(|layer| layer.layer_type_id == XacAttribute::AttribPositions as u32);
+
+        let normals_layer = mesh
+            .vertex_attribute_layer
+            .iter()
+            .find(|layer| layer.layer_type_id == XacAttribute::AttribNormals as u32);
+
+        let tangents_layer = mesh
+            .vertex_attribute_layer
+            .iter()
+            .find(|layer| layer.layer_type_id == XacAttribute::AttribTangents as u32);
+
+        let uvs_layer = mesh
+            .vertex_attribute_layer
+            .iter()
+            .find(|layer| layer.layer_type_id == XacAttribute::AttribUvcoords as u32);
+
+        let colors32_layer = mesh
+            .vertex_attribute_layer
+            .iter()
+            .find(|layer| layer.layer_type_id == XacAttribute::AttribColors32 as u32);
+
+        let original_vertex_numbers_layer = mesh
+            .vertex_attribute_layer
+            .iter()
+            .find(|layer| layer.layer_type_id == XacAttribute::AttribOrgvtxnumbers as u32);
+
+        let colors128_layer = mesh
+            .vertex_attribute_layer
+            .iter()
+            .find(|layer| layer.layer_type_id == XacAttribute::AttribColors128 as u32);
+
+        let bitangents_layer = mesh
+            .vertex_attribute_layer
+            .iter()
+            .find(|layer| layer.layer_type_id == XacAttribute::AttribBitangents as u32);
+
+        let positions_data = if let Some(l) = positions_layer {
+            Some(&l.mesh_data)
+        } else {
+            None
+        };
+
+        let normals_data = if let Some(l) = normals_layer {
+            Some(&l.mesh_data)
+        } else {
+            None
+        };
+
+        let tangents_data = if let Some(l) = tangents_layer {
+            Some(&l.mesh_data)
+        } else {
+            None
+        };
+
+        let uvs_data = if let Some(l) = uvs_layer {
+            Some(&l.mesh_data)
+        } else {
+            None
+        };
+
+        let colors32_data = if let Some(l) = colors32_layer {
+            Some(&l.mesh_data)
+        } else {
+            None
+        };
+
+        let original_vertex_numbers_data = if let Some(l) = original_vertex_numbers_layer {
+            Some(&l.mesh_data)
+        } else {
+            None
+        };
+
+        let colors128_data = if let Some(l) = colors128_layer {
+            Some(&l.mesh_data)
+        } else {
+            None
+        };
+
+        let bitangents_data = if let Some(l) = bitangents_layer {
+            Some(&l.mesh_data)
+        } else {
+            None
+        };
+
+        let mut vertex_offset: u32 = 0;
+        let mut submeshes = Vec::new();
+
+        for (i, submesh) in mesh.sub_meshes.iter().enumerate() {
+            let material_index = submesh.material_index as usize;
+
+            let mut submesh_data = SubMesh {
+                texture_name: String::new(),
+                position_count: 0,
+                positions: Vec::new(),
+                normal_count: 0,
+                normals: Vec::new(),
+                tangent_count: 0,
+                tangents: Vec::new(),
+                uvcoord_count: 0,
+                uvcoords: Vec::new(),
+                color32_count: 0,
+                colors32: Vec::new(),
+                original_vertex_numbers_count: 0,
+                original_vertex_numbers: Vec::new(),
+                color128_count: 0,
+                colors128: Vec::new(),
+                bitangent_count: 0,
+                bitangents: Vec::new(),
+            };
+
+            // Process texture name if material_index is valid
+            if material_index != 0 {
+                if let Some(material_name) = texture_name.get(material_index) {
+                    submesh_data.texture_name = material_name.to_string();
+                }
+            }
+
+            // Write vertex positions if data exists
+            if let Some(positions_layer) = positions_layer {
+                for v in 0..submesh.num_verts {
+                    let actual_index = vertex_offset + v;
+                    let offset = (actual_index * 12) as usize;
+
+                    if offset + 12 > positions_data.unwrap().len() {
+                        return Err(io::Error::new(
+                            io::ErrorKind::UnexpectedEof,
+                            "Vertex data out of bounds",
+                        ));
+                    }
+
+                    let px = f32::from_le_bytes(
+                        positions_data.unwrap()[offset..offset + 4]
+                            .try_into()
+                            .unwrap(),
+                    );
+                    let py = f32::from_le_bytes(
+                        positions_data.unwrap()[offset + 4..offset + 8]
+                            .try_into()
+                            .unwrap(),
+                    );
+                    let pz = f32::from_le_bytes(
+                        positions_data.unwrap()[offset + 8..offset + 12]
+                            .try_into()
+                            .unwrap(),
+                    );
+
+                    submesh_data.positions.push([-px, py, pz]);
+                }
+                submesh_data.position_count = submesh_data.positions.len();
+            }
+
+            // Write normals if data exists
+            if let Some(normals_layer) = normals_layer {
+                for v in 0..submesh.num_verts {
+                    let actual_index = vertex_offset + v;
+                    let offset = (actual_index * 12) as usize;
+
+                    if offset + 12 > normals_data.unwrap().len() {
+                        return Err(io::Error::new(
+                            io::ErrorKind::UnexpectedEof,
+                            "Normal data out of bounds",
+                        ));
+                    }
+
+                    let nx = f32::from_le_bytes(
+                        normals_data.unwrap()[offset..offset + 4]
+                            .try_into()
+                            .unwrap(),
+                    );
+                    let ny = f32::from_le_bytes(
+                        normals_data.unwrap()[offset + 4..offset + 8]
+                            .try_into()
+                            .unwrap(),
+                    );
+                    let nz = f32::from_le_bytes(
+                        normals_data.unwrap()[offset + 8..offset + 12]
+                            .try_into()
+                            .unwrap(),
+                    );
+
+                    submesh_data.normals.push([-nx, ny, nz]);
+                }
+                submesh_data.normal_count = submesh_data.normals.len();
+            }
+
+            // Write tangents if data exists
+            if let Some(tangents_layer) = tangents_layer {
+                for v in 0..submesh.num_verts {
+                    let actual_index = vertex_offset + v;
+                    let offset = (actual_index * 16) as usize; // 16 bytes for tangent (4 components)
+
+                    if offset + 16 > tangents_data.unwrap().len() {
+                        return Err(io::Error::new(
+                            io::ErrorKind::UnexpectedEof,
+                            "Tangent data out of bounds",
+                        ));
+                    }
+
+                    let tx = f32::from_le_bytes(
+                        tangents_data.unwrap()[offset..offset + 4]
+                            .try_into()
+                            .unwrap(),
+                    );
+                    let ty = f32::from_le_bytes(
+                        tangents_data.unwrap()[offset + 4..offset + 8]
+                            .try_into()
+                            .unwrap(),
+                    );
+                    let tz = f32::from_le_bytes(
+                        tangents_data.unwrap()[offset + 8..offset + 12]
+                            .try_into()
+                            .unwrap(),
+                    );
+                    let tw = f32::from_le_bytes(
+                        tangents_data.unwrap()[offset + 12..offset + 16]
+                            .try_into()
+                            .unwrap(),
+                    );
+
+                    submesh_data.tangents.push([tx, ty, tz, tw]);
+                }
+                submesh_data.tangent_count = submesh_data.tangents.len();
+            }
+
+            // Write UVs if data exists
+            if let Some(uvs_layer) = uvs_layer {
+                for v in 0..submesh.num_verts {
+                    let actual_index = vertex_offset + v;
+                    let offset = (actual_index * 8) as usize; // 8 bytes for UV (2 components)
+
+                    if offset + 8 > uvs_data.unwrap().len() {
+                        return Err(io::Error::new(
+                            io::ErrorKind::UnexpectedEof,
+                            "UV data out of bounds",
+                        ));
+                    }
+
+                    let u = f32::from_le_bytes(
+                        uvs_data.unwrap()[offset..offset + 4].try_into().unwrap(),
+                    );
+                    let v = f32::from_le_bytes(
+                        uvs_data.unwrap()[offset + 4..offset + 8]
+                            .try_into()
+                            .unwrap(),
+                    );
+
+                    submesh_data.uvcoords.push([u, v]);
+                }
+                submesh_data.uvcoord_count = submesh_data.uvcoords.len();
+            }
+
+            // Write Colors32 if data exists
+            if let Some(colors32_layer) = colors32_layer {
+                for v in 0..submesh.num_verts {
+                    let actual_index = vertex_offset + v;
+                    let offset = (actual_index * 4) as usize; // 4 bytes for color32
+
+                    if offset + 4 > colors32_data.unwrap().len() {
+                        return Err(io::Error::new(
+                            io::ErrorKind::UnexpectedEof,
+                            "Color32 data out of bounds",
+                        ));
+                    }
+
+                    let r = u32::from_le_bytes(
+                        colors32_data.unwrap()[offset..offset + 4]
+                            .try_into()
+                            .unwrap(),
+                    );
+
+                    submesh_data.colors32.push(r);
+                }
+                submesh_data.color32_count = submesh_data.colors32.len();
+            }
+
+            // Write Original Vertex Numbers if data exists
+            if let Some(original_vertex_numbers_layer) = original_vertex_numbers_layer {
+                for v in 0..submesh.num_verts {
+                    let actual_index = vertex_offset + v;
+                    let offset = (actual_index * 4) as usize; // 4 bytes for vertex number
+
+                    if offset + 4 > original_vertex_numbers_data.unwrap().len() {
+                        return Err(io::Error::new(
+                            io::ErrorKind::UnexpectedEof,
+                            "Original vertex numbers data out of bounds",
+                        ));
+                    }
+
+                    let vertex_number = u32::from_le_bytes(
+                        original_vertex_numbers_data.unwrap()[offset..offset + 4]
+                            .try_into()
+                            .unwrap(),
+                    );
+
+                    submesh_data.original_vertex_numbers.push(vertex_number);
+                }
+                submesh_data.original_vertex_numbers_count =
+                    submesh_data.original_vertex_numbers.len();
+            }
+
+            // Write Color128 if data exists
+            if let Some(colors128_layer) = colors128_layer {
+                for v in 0..submesh.num_verts {
+                    let actual_index = vertex_offset + v;
+                    let offset = (actual_index * 16) as usize; // 16 bytes for Color128 (4 components)
+
+                    if offset + 16 > colors128_data.unwrap().len() {
+                        return Err(io::Error::new(
+                            io::ErrorKind::UnexpectedEof,
+                            "Color128 data out of bounds",
+                        ));
+                    }
+
+                    let r = f32::from_le_bytes(
+                        colors128_data.unwrap()[offset..offset + 4]
+                            .try_into()
+                            .unwrap(),
+                    );
+                    let g = f32::from_le_bytes(
+                        colors128_data.unwrap()[offset + 4..offset + 8]
+                            .try_into()
+                            .unwrap(),
+                    );
+                    let b = f32::from_le_bytes(
+                        colors128_data.unwrap()[offset + 8..offset + 12]
+                            .try_into()
+                            .unwrap(),
+                    );
+                    let a = f32::from_le_bytes(
+                        colors128_data.unwrap()[offset + 12..offset + 16]
+                            .try_into()
+                            .unwrap(),
+                    );
+
+                    submesh_data.colors128.push([r, g, b, a]);
+                }
+                submesh_data.color128_count = submesh_data.colors128.len();
+            }
+
+            // Write Bitangents if data exists
+            if let Some(bitangents_layer) = bitangents_layer {
+                for v in 0..submesh.num_verts {
+                    let actual_index = vertex_offset + v;
+                    let offset = (actual_index * 12) as usize; // 12 bytes for bitangent (3 components)
+
+                    if offset + 12 > bitangents_data.unwrap().len() {
+                        return Err(io::Error::new(
+                            io::ErrorKind::UnexpectedEof,
+                            "Bitangent data out of bounds",
+                        ));
+                    }
+
+                    let bx = f32::from_le_bytes(
+                        bitangents_data.unwrap()[offset..offset + 4]
+                            .try_into()
+                            .unwrap(),
+                    );
+                    let by = f32::from_le_bytes(
+                        bitangents_data.unwrap()[offset + 4..offset + 8]
+                            .try_into()
+                            .unwrap(),
+                    );
+                    let bz = f32::from_le_bytes(
+                        bitangents_data.unwrap()[offset + 8..offset + 12]
+                            .try_into()
+                            .unwrap(),
+                    );
+
+                    submesh_data.bitangents.push([bx, by, bz]);
+                }
+                submesh_data.bitangent_count = submesh_data.bitangents.len();
+            }
+
+            // Add submesh to the list if it has valid data
+            if !submesh_data.positions.is_empty()
+                || !submesh_data.normals.is_empty()
+                || !submesh_data.tangents.is_empty()
+                || !submesh_data.uvcoords.is_empty()
+                || !submesh_data.colors32.is_empty()
+                || !submesh_data.original_vertex_numbers.is_empty()
+                || !submesh_data.colors128.is_empty()
+                || !submesh_data.bitangents.is_empty()
+            {
+                submeshes.push(submesh_data);
+            }
+
+            vertex_offset += submesh.num_verts;
+        }
+
+        // Return the Mesh struct with the submeshes and their count
+        Ok(Mesh {
+            submesh_count: submeshes.len(),
+            submeshes,
+        })
+    }
+
+    fn export_to_struct2(&self, mesh: &XACMesh2) -> io::Result<Mesh> {
+        let texture_name = self.get_texture_names();
+
+        // Find layers by their layer_type_id
+        let positions_layer = mesh
+            .vertex_attribute_layer
+            .iter()
+            .find(|layer| layer.layer_type_id == XacAttribute::AttribPositions as u32);
+
+        let normals_layer = mesh
+            .vertex_attribute_layer
+            .iter()
+            .find(|layer| layer.layer_type_id == XacAttribute::AttribNormals as u32);
+
+        let tangents_layer = mesh
+            .vertex_attribute_layer
+            .iter()
+            .find(|layer| layer.layer_type_id == XacAttribute::AttribTangents as u32);
+
+        let uvs_layer = mesh
+            .vertex_attribute_layer
+            .iter()
+            .find(|layer| layer.layer_type_id == XacAttribute::AttribUvcoords as u32);
+
+        let colors32_layer = mesh
+            .vertex_attribute_layer
+            .iter()
+            .find(|layer| layer.layer_type_id == XacAttribute::AttribColors32 as u32);
+
+        let original_vertex_numbers_layer = mesh
+            .vertex_attribute_layer
+            .iter()
+            .find(|layer| layer.layer_type_id == XacAttribute::AttribOrgvtxnumbers as u32);
+
+        let colors128_layer = mesh
+            .vertex_attribute_layer
+            .iter()
+            .find(|layer| layer.layer_type_id == XacAttribute::AttribColors128 as u32);
+
+        let bitangents_layer = mesh
+            .vertex_attribute_layer
+            .iter()
+            .find(|layer| layer.layer_type_id == XacAttribute::AttribBitangents as u32);
+
+        let positions_data = if let Some(l) = positions_layer {
+            Some(&l.mesh_data)
+        } else {
+            None
+        };
+
+        let normals_data = if let Some(l) = normals_layer {
+            Some(&l.mesh_data)
+        } else {
+            None
+        };
+
+        let tangents_data = if let Some(l) = tangents_layer {
+            Some(&l.mesh_data)
+        } else {
+            None
+        };
+
+        let uvs_data = if let Some(l) = uvs_layer {
+            Some(&l.mesh_data)
+        } else {
+            None
+        };
+
+        let colors32_data = if let Some(l) = colors32_layer {
+            Some(&l.mesh_data)
+        } else {
+            None
+        };
+
+        let original_vertex_numbers_data = if let Some(l) = original_vertex_numbers_layer {
+            Some(&l.mesh_data)
+        } else {
+            None
+        };
+
+        let colors128_data = if let Some(l) = colors128_layer {
+            Some(&l.mesh_data)
+        } else {
+            None
+        };
+
+        let bitangents_data = if let Some(l) = bitangents_layer {
+            Some(&l.mesh_data)
+        } else {
+            None
+        };
+
+        let mut vertex_offset: u32 = 0;
+        let mut submeshes = Vec::new();
+
+        for (i, submesh) in mesh.sub_meshes.iter().enumerate() {
+            let material_index = submesh.material_index as usize;
+
+            let mut submesh_data = SubMesh {
+                texture_name: String::new(),
+                position_count: 0,
+                positions: Vec::new(),
+                normal_count: 0,
+                normals: Vec::new(),
+                tangent_count: 0,
+                tangents: Vec::new(),
+                uvcoord_count: 0,
+                uvcoords: Vec::new(),
+                color32_count: 0,
+                colors32: Vec::new(),
+                original_vertex_numbers_count: 0,
+                original_vertex_numbers: Vec::new(),
+                color128_count: 0,
+                colors128: Vec::new(),
+                bitangent_count: 0,
+                bitangents: Vec::new(),
+            };
+
+            // Process texture name if material_index is valid
+            if material_index != 0 {
+                if let Some(material_name) = texture_name.get(material_index) {
+                    submesh_data.texture_name = material_name.to_string();
+                }
+            }
+
+            // Write vertex positions if data exists
+            if let Some(positions_layer) = positions_layer {
+                for v in 0..submesh.num_verts {
+                    let actual_index = vertex_offset + v;
+                    let offset = (actual_index * 12) as usize;
+
+                    if offset + 12 > positions_data.unwrap().len() {
+                        return Err(io::Error::new(
+                            io::ErrorKind::UnexpectedEof,
+                            "Vertex data out of bounds",
+                        ));
+                    }
+
+                    let px = f32::from_le_bytes(
+                        positions_data.unwrap()[offset..offset + 4]
+                            .try_into()
+                            .unwrap(),
+                    );
+                    let py = f32::from_le_bytes(
+                        positions_data.unwrap()[offset + 4..offset + 8]
+                            .try_into()
+                            .unwrap(),
+                    );
+                    let pz = f32::from_le_bytes(
+                        positions_data.unwrap()[offset + 8..offset + 12]
+                            .try_into()
+                            .unwrap(),
+                    );
+
+                    submesh_data.positions.push([-px, py, pz]);
+                }
+                submesh_data.position_count = submesh_data.positions.len();
+            }
+
+            // Write normals if data exists
+            if let Some(normals_layer) = normals_layer {
+                for v in 0..submesh.num_verts {
+                    let actual_index = vertex_offset + v;
+                    let offset = (actual_index * 12) as usize;
+
+                    if offset + 12 > normals_data.unwrap().len() {
+                        return Err(io::Error::new(
+                            io::ErrorKind::UnexpectedEof,
+                            "Normal data out of bounds",
+                        ));
+                    }
+
+                    let nx = f32::from_le_bytes(
+                        normals_data.unwrap()[offset..offset + 4]
+                            .try_into()
+                            .unwrap(),
+                    );
+                    let ny = f32::from_le_bytes(
+                        normals_data.unwrap()[offset + 4..offset + 8]
+                            .try_into()
+                            .unwrap(),
+                    );
+                    let nz = f32::from_le_bytes(
+                        normals_data.unwrap()[offset + 8..offset + 12]
+                            .try_into()
+                            .unwrap(),
+                    );
+
+                    submesh_data.normals.push([-nx, ny, nz]);
+                }
+                submesh_data.normal_count = submesh_data.normals.len();
+            }
+
+            // Write tangents if data exists
+            if let Some(tangents_layer) = tangents_layer {
+                for v in 0..submesh.num_verts {
+                    let actual_index = vertex_offset + v;
+                    let offset = (actual_index * 16) as usize; // 16 bytes for tangent (4 components)
+
+                    if offset + 16 > tangents_data.unwrap().len() {
+                        return Err(io::Error::new(
+                            io::ErrorKind::UnexpectedEof,
+                            "Tangent data out of bounds",
+                        ));
+                    }
+
+                    let tx = f32::from_le_bytes(
+                        tangents_data.unwrap()[offset..offset + 4]
+                            .try_into()
+                            .unwrap(),
+                    );
+                    let ty = f32::from_le_bytes(
+                        tangents_data.unwrap()[offset + 4..offset + 8]
+                            .try_into()
+                            .unwrap(),
+                    );
+                    let tz = f32::from_le_bytes(
+                        tangents_data.unwrap()[offset + 8..offset + 12]
+                            .try_into()
+                            .unwrap(),
+                    );
+                    let tw = f32::from_le_bytes(
+                        tangents_data.unwrap()[offset + 12..offset + 16]
+                            .try_into()
+                            .unwrap(),
+                    );
+
+                    submesh_data.tangents.push([tx, ty, tz, tw]);
+                }
+                submesh_data.tangent_count = submesh_data.tangents.len();
+            }
+
+            // Write UVs if data exists
+            if let Some(uvs_layer) = uvs_layer {
+                for v in 0..submesh.num_verts {
+                    let actual_index = vertex_offset + v;
+                    let offset = (actual_index * 8) as usize; // 8 bytes for UV (2 components)
+
+                    if offset + 8 > uvs_data.unwrap().len() {
+                        return Err(io::Error::new(
+                            io::ErrorKind::UnexpectedEof,
+                            "UV data out of bounds",
+                        ));
+                    }
+
+                    let u = f32::from_le_bytes(
+                        uvs_data.unwrap()[offset..offset + 4].try_into().unwrap(),
+                    );
+                    let v = f32::from_le_bytes(
+                        uvs_data.unwrap()[offset + 4..offset + 8]
+                            .try_into()
+                            .unwrap(),
+                    );
+
+                    submesh_data.uvcoords.push([u, v]);
+                }
+                submesh_data.uvcoord_count = submesh_data.uvcoords.len();
+            }
+
+            // Write Colors32 if data exists
+            if let Some(colors32_layer) = colors32_layer {
+                for v in 0..submesh.num_verts {
+                    let actual_index = vertex_offset + v;
+                    let offset = (actual_index * 4) as usize; // 4 bytes for color32
+
+                    if offset + 4 > colors32_data.unwrap().len() {
+                        return Err(io::Error::new(
+                            io::ErrorKind::UnexpectedEof,
+                            "Color32 data out of bounds",
+                        ));
+                    }
+
+                    let r = u32::from_le_bytes(
+                        colors32_data.unwrap()[offset..offset + 4]
+                            .try_into()
+                            .unwrap(),
+                    );
+
+                    submesh_data.colors32.push(r);
+                }
+                submesh_data.color32_count = submesh_data.colors32.len();
+            }
+
+            // Write Original Vertex Numbers if data exists
+            if let Some(original_vertex_numbers_layer) = original_vertex_numbers_layer {
+                for v in 0..submesh.num_verts {
+                    let actual_index = vertex_offset + v;
+                    let offset = (actual_index * 4) as usize; // 4 bytes for vertex number
+
+                    if offset + 4 > original_vertex_numbers_data.unwrap().len() {
+                        return Err(io::Error::new(
+                            io::ErrorKind::UnexpectedEof,
+                            "Original vertex numbers data out of bounds",
+                        ));
+                    }
+
+                    let vertex_number = u32::from_le_bytes(
+                        original_vertex_numbers_data.unwrap()[offset..offset + 4]
+                            .try_into()
+                            .unwrap(),
+                    );
+
+                    submesh_data.original_vertex_numbers.push(vertex_number);
+                }
+                submesh_data.original_vertex_numbers_count =
+                    submesh_data.original_vertex_numbers.len();
+            }
+
+            // Write Color128 if data exists
+            if let Some(colors128_layer) = colors128_layer {
+                for v in 0..submesh.num_verts {
+                    let actual_index = vertex_offset + v;
+                    let offset = (actual_index * 16) as usize; // 16 bytes for Color128 (4 components)
+
+                    if offset + 16 > colors128_data.unwrap().len() {
+                        return Err(io::Error::new(
+                            io::ErrorKind::UnexpectedEof,
+                            "Color128 data out of bounds",
+                        ));
+                    }
+
+                    let r = f32::from_le_bytes(
+                        colors128_data.unwrap()[offset..offset + 4]
+                            .try_into()
+                            .unwrap(),
+                    );
+                    let g = f32::from_le_bytes(
+                        colors128_data.unwrap()[offset + 4..offset + 8]
+                            .try_into()
+                            .unwrap(),
+                    );
+                    let b = f32::from_le_bytes(
+                        colors128_data.unwrap()[offset + 8..offset + 12]
+                            .try_into()
+                            .unwrap(),
+                    );
+                    let a = f32::from_le_bytes(
+                        colors128_data.unwrap()[offset + 12..offset + 16]
+                            .try_into()
+                            .unwrap(),
+                    );
+
+                    submesh_data.colors128.push([r, g, b, a]);
+                }
+                submesh_data.color128_count = submesh_data.colors128.len();
+            }
+
+            // Write Bitangents if data exists
+            if let Some(bitangents_layer) = bitangents_layer {
+                for v in 0..submesh.num_verts {
+                    let actual_index = vertex_offset + v;
+                    let offset = (actual_index * 12) as usize; // 12 bytes for bitangent (3 components)
+
+                    if offset + 12 > bitangents_data.unwrap().len() {
+                        return Err(io::Error::new(
+                            io::ErrorKind::UnexpectedEof,
+                            "Bitangent data out of bounds",
+                        ));
+                    }
+
+                    let bx = f32::from_le_bytes(
+                        bitangents_data.unwrap()[offset..offset + 4]
+                            .try_into()
+                            .unwrap(),
+                    );
+                    let by = f32::from_le_bytes(
+                        bitangents_data.unwrap()[offset + 4..offset + 8]
+                            .try_into()
+                            .unwrap(),
+                    );
+                    let bz = f32::from_le_bytes(
+                        bitangents_data.unwrap()[offset + 8..offset + 12]
+                            .try_into()
+                            .unwrap(),
+                    );
+
+                    submesh_data.bitangents.push([bx, by, bz]);
+                }
+                submesh_data.bitangent_count = submesh_data.bitangents.len();
+            }
+
+            // Add submesh to the list if it has valid data
+            if !submesh_data.positions.is_empty()
+                || !submesh_data.normals.is_empty()
+                || !submesh_data.tangents.is_empty()
+                || !submesh_data.uvcoords.is_empty()
+                || !submesh_data.colors32.is_empty()
+                || !submesh_data.original_vertex_numbers.is_empty()
+                || !submesh_data.colors128.is_empty()
+                || !submesh_data.bitangents.is_empty()
+            {
+                submeshes.push(submesh_data);
+            }
+
+            vertex_offset += submesh.num_verts;
+        }
+
+        // Return the Mesh struct with the submeshes and their count
+        Ok(Mesh {
+            submesh_count: submeshes.len(),
+            submeshes,
+        })
     }
 }
