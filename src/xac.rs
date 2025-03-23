@@ -715,7 +715,7 @@ struct XACVertexAttributeLayer {
 }
 
 #[binread]
-#[derive(Default, Debug, Serialize, Deserialize)]
+#[derive(Default, Debug, Serialize, Deserialize, Clone)]
 #[br(little)]
 struct XACSubMesh {
     num_indices: u32,
@@ -1125,6 +1125,8 @@ pub struct SubMesh {
     pub colors128: Vec<[f32; 4]>,
     pub bitangent_count: usize,
     pub bitangents: Vec<[f32; 3]>,
+    pub indices_count: usize,
+    pub indices: Vec<u32>,
 }
 
 #[pymethods]
@@ -1200,6 +1202,14 @@ impl SubMesh {
 
     pub fn bitangents(&self) -> Vec<[f32; 3]> {
         self.bitangents.clone()
+    }
+
+    pub fn indices_count(&self) -> usize {
+        self.indices_count
+    }
+
+    pub fn indices(&self) -> Vec<u32> {
+        self.indices.clone()
     }
 }
 
@@ -2360,6 +2370,8 @@ impl XACFile {
                 colors128: Vec::new(),
                 bitangent_count: 0,
                 bitangents: Vec::new(),
+                indices_count: submesh.num_indices as usize,
+                indices: submesh.indices.clone(),
             };
 
             // Process texture name if material_index is valid
@@ -2764,6 +2776,8 @@ impl XACFile {
                 colors128: Vec::new(),
                 bitangent_count: 0,
                 bitangents: Vec::new(),
+                indices_count: submesh.num_indices as usize,
+                indices: submesh.indices.clone(),
             };
 
             // Process texture name if material_index is valid
