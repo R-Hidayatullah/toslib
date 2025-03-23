@@ -1,0 +1,10 @@
+/target
+/output
+*.ipf
+*.xac
+*.dds
+*.ies
+*.obj
+*.mtl
+*.xml
+*.json
