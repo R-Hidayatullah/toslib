@@ -1105,8 +1105,8 @@ pub struct XACFile {
     chunk_data: Vec<XacChunkData>,
 }
 
-#[derive(Default, Debug, Serialize, Deserialize)]
-#[pyclass] // This makes it a Python class
+#[derive(Default, Debug, Serialize, Deserialize, Clone)]
+#[pyclass]
 pub struct SubMesh {
     pub texture_name: String,
     pub position_count: usize,
@@ -1133,9 +1133,77 @@ impl SubMesh {
     fn new() -> Self {
         SubMesh::default()
     }
+
+    pub fn texture_name(&self) -> &str {
+        &self.texture_name
+    }
+
+    pub fn position_count(&self) -> usize {
+        self.position_count
+    }
+
+    pub fn positions(&self) -> Vec<[f32; 3]> {
+        self.positions.clone()
+    }
+
+    pub fn normal_count(&self) -> usize {
+        self.normal_count
+    }
+
+    pub fn normals(&self) -> Vec<[f32; 3]> {
+        self.normals.clone()
+    }
+
+    pub fn tangent_count(&self) -> usize {
+        self.tangent_count
+    }
+
+    pub fn tangents(&self) -> Vec<[f32; 4]> {
+        self.tangents.clone()
+    }
+
+    pub fn uvcoord_count(&self) -> usize {
+        self.uvcoord_count
+    }
+
+    pub fn uvcoords(&self) -> Vec<[f32; 2]> {
+        self.uvcoords.clone()
+    }
+
+    pub fn color32_count(&self) -> usize {
+        self.color32_count
+    }
+
+    pub fn colors32(&self) -> Vec<u32> {
+        self.colors32.clone()
+    }
+
+    pub fn original_vertex_numbers_count(&self) -> usize {
+        self.original_vertex_numbers_count
+    }
+
+    pub fn original_vertex_numbers(&self) -> Vec<u32> {
+        self.original_vertex_numbers.clone()
+    }
+
+    pub fn color128_count(&self) -> usize {
+        self.color128_count
+    }
+
+    pub fn colors128(&self) -> Vec<[f32; 4]> {
+        self.colors128.clone()
+    }
+
+    pub fn bitangent_count(&self) -> usize {
+        self.bitangent_count
+    }
+
+    pub fn bitangents(&self) -> Vec<[f32; 3]> {
+        self.bitangents.clone()
+    }
 }
 
-#[derive(Default, Debug, Serialize, Deserialize)]
+#[derive(Default, Debug, Serialize, Deserialize, Clone)]
 #[pyclass]
 pub struct Mesh {
     pub submesh_count: usize,
@@ -1147,6 +1215,14 @@ impl Mesh {
     #[new]
     fn new() -> Self {
         Mesh::default()
+    }
+
+    pub fn submesh_count(&self) -> usize {
+        self.submesh_count
+    }
+
+    pub fn submeshes(&self) -> Vec<SubMesh> {
+        self.submeshes.clone()
     }
 }
 
@@ -1223,10 +1299,6 @@ impl XACFile {
     fn process_chunk<R: Read + Seek>(&mut self, chunk: &FileChunk, reader: &mut BinaryReader<R>) {
         match chunk.chunk_id {
             id if id == XacChunk::XacChunkNode as u32 => {
-                println!(
-                    "Chunk: XacChunkNode, Size: {}, Version: {}",
-                    chunk.size_in_bytes, chunk.version
-                );
                 let node = match chunk.version {
                     1 => Some(XacChunkData::XacNode(self.read_xac_node(reader))),
                     2 => Some(XacChunkData::XacNode2(self.read_xac_node2(reader))),
@@ -1241,10 +1313,6 @@ impl XACFile {
                 }
             }
             id if id == XacChunk::XacChunkMesh as u32 => {
-                println!(
-                    "Chunk: XacChunkMesh, Size: {}, Version: {}",
-                    chunk.size_in_bytes, chunk.version
-                );
                 let mesh = match chunk.version {
                     1 => Some(XacChunkData::XACMesh(self.read_xac_mesh(reader))),
                     2 => Some(XacChunkData::XACMesh2(self.read_xac_mesh2(reader))),
@@ -1257,10 +1325,6 @@ impl XACFile {
                 }
             }
             id if id == XacChunk::XacChunkSkinninginfo as u32 => {
-                println!(
-                    "Chunk: XacChunkSkinninginfo, Size: {}, Version: {}",
-                    chunk.size_in_bytes, chunk.version
-                );
                 let skinning_info = match chunk.version {
                     1 => Some(XacChunkData::XacSkinningInfo(
                         self.read_xac_skinning_info(reader),
@@ -1283,10 +1347,6 @@ impl XACFile {
                 }
             }
             id if id == XacChunk::XacChunkStdmaterial as u32 => {
-                println!(
-                    "Chunk: XacChunkStdmaterial, Size: {}, Version: {}",
-                    chunk.size_in_bytes, chunk.version
-                );
                 let material = match chunk.version {
                     1 => Some(XacChunkData::XacStandardMaterial(
                         self.read_xac_standard_material(reader),
@@ -1306,10 +1366,6 @@ impl XACFile {
                 }
             }
             id if id == XacChunk::XacChunkStdmateriallayer as u32 => {
-                println!(
-                    "Chunk: XacChunkStdmateriallayer, Size: {}, Version: {}",
-                    chunk.size_in_bytes, chunk.version
-                );
                 let material_layer = match chunk.version {
                     1 => Some(XacChunkData::XACStandardMaterialLayer(
                         self.read_xac_standard_material_layer(reader),
@@ -1329,10 +1385,6 @@ impl XACFile {
                 }
             }
             id if id == XacChunk::XacChunkFxmaterial as u32 => {
-                println!(
-                    "Chunk: XacChunkFxmaterial, Size: {}, Version: {}",
-                    chunk.size_in_bytes, chunk.version
-                );
                 let fx_material = match chunk.version {
                     1 => Some(XacChunkData::XACFXMaterial(
                         self.read_xac_fx_material(reader),
@@ -1352,10 +1404,6 @@ impl XACFile {
                 }
             }
             id if id == XacChunk::XacChunkMaterialinfo as u32 => {
-                println!(
-                    "Chunk: XacChunkMaterialinfo, Size: {}, Version: {}",
-                    chunk.size_in_bytes, chunk.version
-                );
                 let material_info = match chunk.version {
                     1 => Some(XacChunkData::XACMaterialInfo(
                         self.read_xac_material_info(reader),
@@ -1372,10 +1420,6 @@ impl XACFile {
                 }
             }
             id if id == XacChunk::XacChunkNodes as u32 => {
-                println!(
-                    "Chunk: XacChunkNodes, Size: {}, Version: {}",
-                    chunk.size_in_bytes, chunk.version
-                );
                 let nodes = match chunk.version {
                     1 => Some(XacChunkData::XACNodes(self.read_xac_nodes(reader))),
                     _ => None,
@@ -1387,10 +1431,6 @@ impl XACFile {
                 }
             }
             id if id == XacChunk::XacChunkNodegroups as u32 => {
-                println!(
-                    "Chunk: XacChunkNodegroups, Size: {}, Version: {}",
-                    chunk.size_in_bytes, chunk.version
-                );
                 let node_group = match chunk.version {
                     1 => Some(XacChunkData::XACNodeGroup(self.read_xac_node_group(reader))),
                     _ => None,
@@ -1402,10 +1442,6 @@ impl XACFile {
                 }
             }
             id if id == XacChunk::XacChunkMeshlodlevels as u32 => {
-                println!(
-                    "Chunk: XacChunkMeshlodlevels, Size: {}, Version: {}",
-                    chunk.size_in_bytes, chunk.version
-                );
                 let mesh_lod = match chunk.version {
                     1 => Some(XacChunkData::XACMeshLodLevel(
                         self.read_xac_mesh_lod_level(reader),
@@ -1422,10 +1458,6 @@ impl XACFile {
                 }
             }
             id if id == XacChunk::XacLimit as u32 => {
-                println!(
-                    "Chunk: XacLimit, Size: {}, Version: {}",
-                    chunk.size_in_bytes, chunk.version
-                );
                 let mesh_lod = match chunk.version {
                     1 => Some(XacChunkData::XACLimit(self.read_xac_limit(reader))),
                     _ => None,
@@ -1437,10 +1469,6 @@ impl XACFile {
                 }
             }
             id if id == XacChunk::XacChunkInfo as u32 => {
-                println!(
-                    "Chunk: XacChunkInfo, Size: {}, Version: {}",
-                    chunk.size_in_bytes, chunk.version
-                );
                 let mesh_lod = match chunk.version {
                     1 => Some(XacChunkData::XacInfo(self.read_xac_info(reader))),
                     2 => Some(XacChunkData::XacInfo2(self.read_xac_info2(reader))),
@@ -1455,10 +1483,6 @@ impl XACFile {
                 }
             }
             id if id == XacChunk::XacChunkStdprogmorphtarget as u32 => {
-                println!(
-                    "Chunk: XacChunkStdprogmorphtarget, Size: {}, Version: {}",
-                    chunk.size_in_bytes, chunk.version
-                );
                 let mesh_lod = match chunk.version {
                     1 => Some(XacChunkData::XACPMorphTarget(
                         self.read_xac_pmorph_target(reader),
@@ -1476,10 +1500,6 @@ impl XACFile {
             }
 
             id if id == XacChunk::XacChunkStdpmorphtargets as u32 => {
-                println!(
-                    "Chunk: XacChunkStdpmorphtargets, Size: {}, Version: {}",
-                    chunk.size_in_bytes, chunk.version
-                );
                 let mesh_lod = match chunk.version {
                     1 => Some(XacChunkData::XACPMorphTargets(
                         self.read_xac_pmorph_targets(reader),
@@ -1497,10 +1517,6 @@ impl XACFile {
             }
 
             id if id == XacChunk::XacChunkNodemotionsources as u32 => {
-                println!(
-                    "Chunk: XacChunkNodemotionsources, Size: {}, Version: {}",
-                    chunk.size_in_bytes, chunk.version
-                );
                 let mesh_lod = match chunk.version {
                     1 => Some(XacChunkData::XACNodeMotionSources(
                         self.read_xac_node_motion_sources(reader),
@@ -1518,10 +1534,6 @@ impl XACFile {
             }
 
             id if id == XacChunk::XacChunkAttachmentnodes as u32 => {
-                println!(
-                    "Chunk: XacChunkAttachmentnodes, Size: {}, Version: {}",
-                    chunk.size_in_bytes, chunk.version
-                );
                 let mesh_lod = match chunk.version {
                     1 => Some(XacChunkData::XACAttachmentNodes(
                         self.read_xac_attachment_nodes(reader),

@@ -1,5 +1,6 @@
 use crate::xac::Mesh;
 use pyo3::prelude::*;
+use xac::SubMesh;
 
 pub fn add(left: u64, right: u64) -> u64 {
     left + right
@@ -28,6 +29,8 @@ fn extract_xac_data_py(ipf_path: String, xac_filename: String) -> PyResult<Vec<M
 // PyO3 module initialization
 #[pymodule]
 fn toslib(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<SubMesh>()?;
+    m.add_class::<Mesh>()?;
     m.add_function(wrap_pyfunction!(extract_xac_data_py, m)?)?;
     Ok(())
 }
