@@ -510,15 +510,22 @@ struct XacUv {
 
 #[derive(Default, Debug, Serialize, Deserialize, BinRead)]
 #[br(little)]
+struct XacSkinInfoPerVertex {
+    num_influences: u8,
+    #[br(count = num_influences)]
+    influences: Vec<XacSkinInfluence>,
+}
+
+#[derive(Default, Debug, Serialize, Deserialize, BinRead)]
+#[br(import(num_org_verts:u32))]
+#[br(little)]
 struct XacSkinningInfo {
     node_index: u32,
     is_for_collision_mesh: u8,
     padding: [u8; 3],
-    // Fix this idk what is this mean!!!
-    // Followed by:
-    // for all mesh original num vertices
-    //     num_influences: u8
-    //         XacSkinInfluence[num_influences]
+
+    #[br(count = num_org_verts)]
+    skinning_influence: Vec<XacSkinInfoPerVertex>,
 }
 
 #[derive(Default, Debug, Serialize, Deserialize, BinRead)]
@@ -1605,7 +1612,37 @@ impl XACFile {
         &mut self,
         reader: &mut BinaryReader<R>,
     ) -> XacSkinningInfo {
-        XacSkinningInfo::read(&mut reader.reader).unwrap()
+        let mut num_org_verts: u32 = 0;
+        // Read node_index first and check for matches
+        let node_id = reader.read_u32().unwrap(); // Read node_id once
+        // Loop through the chunk_data to find the right chunk based on node_id
+        for chunk in &self.chunk_data {
+            match chunk {
+                // Match the specific variant and check if node_id matches the read value
+                XacChunkData::XACMesh(data) => {
+                    if data.node_index == node_id {
+                        // Set num_org_verts based on the matched chunk
+                        num_org_verts = data.num_org_verts;
+                        // Move back 4 bytes since we've already read the node_id
+                        reader.skip_bytes(-4).unwrap();
+                    }
+                }
+                XacChunkData::XACMesh2(data) => {
+                    if data.node_index == node_id {
+                        // Set num_org_verts based on the matched chunk
+                        num_org_verts = data.num_org_verts;
+                        // Move back 4 bytes since we've already read the node_id
+                        reader.skip_bytes(-4).unwrap();
+                    }
+                }
+                // Exhaustive match for other variants (to avoid non-exhaustive match warnings)
+                _ => {
+                    // Optionally, you can log or do something else for unmatched variants
+                    // println!("Ignoring variant: {:?}", chunk);
+                }
+            }
+        }
+        XacSkinningInfo::read_args(&mut reader.reader, (num_org_verts,)).unwrap()
     }
 
     fn read_xac_skinning_info2<R: Read + Seek>(
